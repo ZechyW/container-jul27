@@ -1,0 +1,56 @@
+---
+# Secrets can hold b64-encoded environmental variables
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nw-secrets
+  labels:
+    app: nwdb
+data:
+  MYSQL_ROOT_PASSWORD: Y2hhbmdlaXQ=
+
+---
+# Deployments manage the replication and maintenance of pods
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nwdb-deploy
+  labels:
+    app: nwdb
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      # Labels for the pods that this deployment is associated with
+      app: nwdb-pod
+
+  template:
+    metadata:
+      name: nwdb-pod
+      labels:
+        app: nwdb-pod
+    spec:
+      containers:
+        - name: nwdb-container
+          image: zechywong/nwdb-test:v3
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: nw-secrets
+          ports:
+            - name: nwdb-port
+              containerPort: 3306
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nwdb-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: nwdb-pod
+  ports:
+  - port: 3306
+    targetPort: nwdb-port
