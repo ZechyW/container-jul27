@@ -1,0 +1,127 @@
+---
+# ConfigMaps hold plain-text environmental variables
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nw-config
+  labels:
+    app: nwapp
+data:
+  # Internal DNS record for the service
+  # DB_HOST: nwdb-svc.nw-ns.svc.cluster.local # FQDNS
+  DB_HOST: nwdb-svc
+
+---
+# Deployments manage the replication and maintenance of pods
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nwapp-deploy
+  labels:
+    app: nwapp
+
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      # Labels for the pods that this deployment is associated with
+      app: nwapp-pod
+
+  template:
+    metadata:
+      name: nwapp-pod
+      labels:
+        app: nwapp-pod
+    spec:
+      containers:
+        - name: nwapp-container
+          image: zechywong/nwserver-test:v2
+          imagePullPolicy: IfNotPresent
+          # Set resource thresholds (for HPA)
+          resources:
+            requests:
+              cpu: 200m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          # Pull from a Secret defined elsewhere
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: 
+                  name: nw-secrets
+                  key: MYSQL_ROOT_PASSWORD
+            # Injected and displayed in `main.js`
+            - name: INSTANCE_IP_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          envFrom:
+            - configMapRef:
+                name: nw-config
+          ports:
+            - name: nwapp-port
+              containerPort: 3000
+
+---
+# Services manage ingress for the application
+apiVersion: v1
+kind: Service
+metadata:
+  name: nwapp-svc
+spec:
+  type: ClusterIP
+  selector:
+    # Labels for the pods that this service routes to
+    app: nwapp-pod
+  ports:
+  - port: 80
+    name: nwapp-svc-port
+    targetPort: nwapp-port
+
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: nwapp-ingress
+  labels:
+    app: nwapp
+
+spec:
+  rules:
+  - host: nwapp.159.89.210.183.nip.io
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: nwapp-svc
+          servicePort: nwapp-svc-port
+
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nwapp-hpa
+  labels:
+    app: nwapp
+
+spec:
+  minReplicas: 1
+  maxReplicas: 4
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nwapp-deploy
+  metrics:
+    - type: Resource
+      resource:
+          name: cpu
+          target:
+            type: Utilization
+            averageUtilization: 15
+    - type: Resource
+      resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 80

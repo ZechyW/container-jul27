@@ -1,0 +1,44 @@
+---
+# Deployments manage the replication and maintenance of pods
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nwapp-deploy
+  labels:
+    app: nwapp
+
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      # Labels for the pods that this deployment is associated with
+      app: nwapp-pod
+
+  template:
+    metadata:
+      name: nwapp-pod
+      labels:
+        app: nwapp-pod
+    spec:
+      containers:
+        - name: nwapp-container
+          image: stackupiss/northwind-app:v2
+          imagePullPolicy: IfNotPresent
+          # Pull from a Secret defined elsewhere
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: 
+                  name: nw-secrets
+                  key: MYSQL_ROOT_PASSWORD
+            # Injected and displayed in `main.js`
+            - name: INSTANCE_IP_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          envFrom:
+            - configMapRef:
+                name: nw-config
+          ports:
+            - name: nwapp-port
+              containerPort: 3000

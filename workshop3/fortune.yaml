@@ -1,0 +1,78 @@
+---
+# Namespaces group resources together
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fortune-ns
+  labels:
+    app: fortune
+    version: v1
+
+---
+# Deployments manage the replication and maintenance of pods
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fortune-deploy
+  namespace: fortune-ns
+  labels:
+    app: fortune
+
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      # Labels for the pods that this deployment is associated with
+      app: fortune-pod
+
+  template:
+    metadata:
+      name: fortune-pod
+      labels:
+        app: fortune-pod
+    spec:
+      containers:
+        - name: fortune-container
+          image: chukmunnlee/fortune:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: for-port
+              containerPort: 3000
+
+---
+# Services manage ingress for the application
+apiVersion: v1
+kind: Service
+metadata:
+  name: fortune-svc
+  namespace: fortune-ns
+  labels:
+    app: fortune
+
+spec:
+  type: ClusterIP
+  selector:
+    # Labels for the pods that this service routes to
+    app: fortune-pod
+  ports:
+  - name: for-svc-port
+    port: 3000
+    targetPort: for-port
+
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: fortune-ingress
+  labels:
+    app: fortune
+
+spec:
+  rules:
+  - host: fortune.159.89.210.183.nip.io
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: fortune-svc
+          servicePort: for-svc-port
