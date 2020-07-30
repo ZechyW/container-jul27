@@ -1,0 +1,130 @@
+## Workshop: Creating a WordPress deployment for a client
+## Assumes `wordpress-db.yaml` and `wordpress-pvc.yaml` have already been successfully applied
+
+## (3) The actual WordPress deployment
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wp-0-config
+  labels:
+    app: wp-0
+data:
+  WORDPRESS_DB_HOST: wp-0-db-mysql
+  # Using "root" here for the workshop
+  WORDPRESS_DB_USER: root
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wp-0-deploy
+  labels:
+    app: wp-0
+
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: wp-0
+
+  template:
+    metadata:
+      name: wp-0-pod
+      labels:
+        app: wp-0
+    spec:
+      volumes:
+        - name: wp-0-vol
+          persistentVolumeClaim:
+            claimName: wp-0-pvc
+
+      containers:
+        - name: wp-container
+          image: wordpress
+          imagePullPolicy: IfNotPresent
+
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+
+          # DB host configuration
+          envFrom:
+            - configMapRef:
+                name: wp-0-config
+
+          # DB password configuration (the name of the env var is different, so we cannot pull directly using `envFrom`)
+          env:
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: wp-0-secret
+                  key: ROOT_PASSWORD
+
+          # WordPress content not stored in DB
+          volumeMounts:
+            - mountPath: /var/www/html
+              name: wp-0-vol
+
+          ports:
+            - name: wp-port
+              containerPort: 80
+
+## (4) Networking setup
+---
+# Service for the WordPress pods
+apiVersion: v1
+kind: Service
+metadata:
+  name: wp-0-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: wp-0
+  ports:
+    - port: 80
+      name: wp-svc-port
+      targetPort: wp-port
+---
+# Ingress, assuming a suitable ingress controller is available (e.g., nginx-ingress)
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: wp-0-ingress
+  labels:
+    app: wp-0
+  annotations:
+    nginx.ingress.kubernetes.io/limit-rps: "5"
+
+spec:
+  rules:
+    - host: wp-0.159.89.210.183.nip.io
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: wp-0-svc
+              servicePort: wp-svc-port
+# ---
+# # Ingress using the Istio gateway
+# apiVersion: extensions/v1beta1
+# kind: Ingress
+# metadata:
+#   name: gateway
+#   annotations:
+#     kubernetes.io/ingress.class: "istio"
+# spec:
+#   rules:
+#   - host: wp-0.157.230.194.142.nip.io
+#     http:
+#       paths:
+#       - path: /
+#         backend:
+#           serviceName: wp-0-svc
+#           servicePort: wp-svc-port

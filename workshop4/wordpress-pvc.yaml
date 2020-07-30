@@ -1,0 +1,22 @@
+## Workshop: Creating a WordPress deployment for a client
+
+## (2) The PVC for WordPress
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wp-0-pvc
+  labels:
+    app: wp-0
+  # Annotations add optional additional custom information
+  # annotations:
+    # volume.beta.kubernetes.io/storage-provisioner: dobs.csi.digitalocean.com
+
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # No need to specify storageClassName if using the default
+  # storageClassName: do-block-storage
+  volumeMode: Filesystem

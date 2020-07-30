@@ -1,0 +1,33 @@
+## Workshop: Creating a WordPress deployment for a client
+
+## (1) The backing MySQL cluster
+## Separated from the main WordPress deployment to allow for easier upgrades etc.
+---
+# Creating the Secret directly here for convenience, but they should probably be created separately
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wp-0-secret
+  labels:
+    app: wp-0
+data:
+  # "changeit"
+  ROOT_PASSWORD: Y2hhbmdlaXQ=
+---
+# Setting up the actual cluster (assuming the mysql operator is installed)
+apiVersion: mysql.presslabs.org/v1alpha1
+kind: MysqlCluster
+metadata:
+  name: wp-0-db
+  labels:
+    app: wp-0
+spec:
+  replicas: 2
+  secretName: wp-0-secret
+  persistentVolumeClaims:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 1Gi
+    storageClassName: do-block-storage
